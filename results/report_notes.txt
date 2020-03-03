@@ -1,0 +1,238 @@
+-----1-----
+Counter({1: 3398, 7: 3115, 3: 3060, 6: 3012, 2: 3009, 9: 2963, 0: 2920, 4: 2909, 8: 2894, 5: 2720})
+
+-----2-----
+def one_hot(target_array):
+
+    # Get the label column
+    a = target_array[0]
+    
+    # Make a numpy ndarray with necessary sample size
+    b = np.zeros((10, a.size))
+    
+    # Fill in the ones using the label column
+    b[a, np.arange(a.size)] = 1
+    return b
+
+-----3-----
+*****a*****
+def forward_pass(x, y, W1, W2, b1, b2):
+
+    # Get the sample size
+    m = x.shape[1]
+
+    # Calculate z1 with given formula
+    z1 = np.dot(W1, x) + b1
+
+    # Vectorize relu function to affect whole numpy array
+    vec_relu = np.vectorize(relu)
+
+    # Calculate h1 with given formula
+    h1 = vec_relu(z1)
+
+    # Calculate z2 with given formula
+    z2 = np.dot(W2, h1) + b2
+
+    # Apply softmax to z2 iteratevly
+    y_hat = np.apply_along_axis(softmax, 0, z2)
+
+    return [z1, z2, h1, y_hat]
+
+
+def softmax(x):
+
+    # Calculates softmax using the given formula
+    # and using np.exp() and np.sum()
+    a = x.max()
+    b = x - a
+
+    exp_x = np.exp(b)
+    res = exp_x / np.sum(exp_x)
+    return res
+
+
+def relu(x):
+    
+    # Calculates relu using the given formula
+    return max(x, 0)
+
+
+*****b*****
+def cross_entropy_loss(y, y_hat):
+    
+    # Get number of samples
+    samples = y.shape[1]
+
+    # Calculate using given formula and vectorization
+    return (-1/ samples) * np.sum(y * np.log(y_hat))
+
+
+*****c*****
+def accuracy(y, y_hat):
+
+    x = 0
+    samples = y.shape[1]
+
+    # Get Transpose of inputs to iterate over columns
+    yT = y.T
+    y_hatT = y_hat.T
+    
+    for i in range(0, samples):
+        # Find the index of the larget probability
+        max_i = np.argmax(y_hatT[i])
+
+        # If that index is 1 in y_hat, increment x
+        if yT[i][max_i] == 1:
+            x += 1
+    
+    # Divide x with sample size and get percentage 
+    return x / samples * 100
+
+
+-----4-----
+def backward_pass(x, y, y_hat, z1, h1, W1, W2, b1, b2, learn_rate):
+
+    # All the vectorized versions of the given functions are used
+    # in the backward_pass. reshape was used in calculating deltaLb1, 2
+    # since the dimensions were off at first.
+
+    alpha = learn_rate
+    m = x.shape[1]
+
+    delta2 = (y_hat - y) / m
+
+    deltaLW2 = np.dot(delta2, h1.T)
+    deltaLb2 = np.sum(delta2, axis=1).reshape(delta2.shape[0], 1)
+    
+    # Vectorize partial_relu function so it affects the whole numpy array
+    vec_relu = np.vectorize(partial_relu)
+    pRelu = vec_relu(z1)
+    delta1 = np.dot(W2.T, delta2) * pRelu
+    
+    deltaLW1 = np.dot(delta1, x.T)
+    deltaLb1 = np.sum(delta1, axis=1).reshape(delta1.shape[0], 1)
+    
+    # Calculate new weights
+    newW1 = W1 - alpha * deltaLW1
+    newW2 = W2 - alpha * deltaLW2
+
+    newb1 = b1 - alpha * deltaLb1
+    newb2 = b2 - alpha * deltaLb2
+
+    return [deltaLW1, deltaLb1, deltaLW2, deltaLb2, newW1, newb1, newW2, newb2]
+
+
+def partial_relu(x):
+
+    # Getting the partial derivative was equivalent
+    # to this statement so I ended up using it.
+    return 1 if x > 0 else 0
+
+
+-----5-----
+*****c*****
+Optimal learning rate is 0.1 with the least overall loss and clear divergence.   
+
+*****d*****
+    
+    # Initialize necessary variables and constants.
+    numEpochs = 100
+    samples = xTrain.shape[1]
+    batchSize = 256
+    learning_rates = [0.001, 0.01, 0.1, 1, 10]
+    result_list = []
+    xTrainSplit = []
+    yTrainSplit = []
+
+    # Split up the xTrain and yTrain sets in 118 mini-batches
+    # and store them in xTrainSplit and yTrainSplit respectively.
+    end = False
+    for batchStart in range(0, samples + batchSize, batchSize):
+        batchEnd = batchStart + batchSize
+        if batchEnd > samples:
+            end = True
+            batchEnd = samples
+        xTrainSplit.append(xTrain[:, batchStart:batchEnd])
+        yTrainSplit.append(yTrain[:, batchStart:batchEnd])
+        if end:
+            break
+
+    # Loop over all the learning rates.
+    for learn_rate in learning_rates:
+    
+        # Initialize weights for each learning rate.
+        W1 = 0.0001 * np.random.randn(30, 784)
+        W2 = 0.0001 * np.random.randn(10, 30)
+        b1 = np.zeros((30, 1))
+        b2 = np.zeros((10, 1))
+        
+        # This dict is used for storing the accuracy and the loss
+        # for plot making later on.
+        results = {
+            'training' : {
+                'loss' : [],
+                'acc' : []
+            },
+            'validation' : {
+                'loss' : [],
+                'acc' : []
+            }
+        }
+        # One results dict for each learning rate.
+        result_list.append(results)
+
+        # Run 100 epochs for each learning rate.
+        for epoch in range(0, numEpochs):
+
+            # Run the previously split up batches one at a time.
+            for split in range(0, 118):
+
+                # Do forward pass on the batch.
+                [z1, z2, h1, yhat] = forward_pass(
+                    xTrainSplit[split],
+                    yTrainSplit[split],
+                    W1, W2, b1, b2
+                )
+
+                # Do backward pass on the patch.
+                [gradW1, gradb1, gradW2, gradb2, newW1, newb1, newW2, newb2] = backward_pass(
+                    xTrainSplit[split],
+                    yTrainSplit[split],
+                    yhat, z1, h1, W1, W2, b1, b2, learn_rate
+                )
+
+                # Update weights
+                W1 = newW1
+                W2 = newW2
+                b1 = newb1
+                b2 = newb2
+
+            # Calculate Loss and Accuracy for the Training Set
+            [z1, z2, h1, yhat] = forward_pass(xTrain, yTrain, W1, W2, b1, b2)
+            result_list[-1]['training']['loss'].append(cross_entropy_loss(yTrain, yhat))
+            result_list[-1]['training']['acc'].append(accuracy(yTrain, yhat))
+
+            # Calculate Loss and Accuracy for the Validation Set
+            [z1, z2, h1, yhat] = forward_pass(xVal, yVal, W1, W2, b1, b2)
+            result_list[-1]['validation']['loss'].append(cross_entropy_loss(yVal, yhat))
+            result_list[-1]['validation']['acc'].append(accuracy(yVal, yhat))
+
+
+-----6-----
+*****a*****
+Stopping Criterion
+The Training Loss is less than previous epoch's and the validation loss is greater than the previous epoch's 3 times in a row. Stopped afer epoch 40
+
+*****c*****
+Training Loss = 0.10743955272139327
+Validation Loss = 0.18076783384090836
+
+*****d*****
+Training Accuracy = 96.81333333333333
+Validation Accuracy = 94.56666666666666
+
+
+-----7-----
+Teting Loss = 0.15325871890638532
+Testing Accuracy = 95.63333333333334
+
